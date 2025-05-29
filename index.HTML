@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Custom YouTube Playlist with EQ</title>
+  <style>
+    body {
+      background-color: #1e1e1e;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 40px;
+    }
+
+    #player-container {
+      display: flex;
+      justify-content: center;
+    }
+
+    #controls {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    .control-btn {
+      background: linear-gradient(to bottom, #4f4f4f, #2b2b2b);
+      border: 2px solid #888;
+      border-radius: 8px;
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
+
+    .control-btn:hover {
+      background: linear-gradient(to bottom, #6f6f6f, #3b3b3b);
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .icon {
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    #scrolling-text-container {
+      overflow: hidden;
+      white-space: nowrap;
+      width: 100%;
+      margin-top: 40px;
+      height: 60px;
+      position: relative;
+    }
+
+    #scrolling-text {
+      display: inline-block;
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+      color: white;
+      font-size: 36px;
+      position: absolute;
+      will-change: transform;
+      animation: scrollText 36s linear infinite;
+    }
+
+    @keyframes scrollText {
+      0% {
+        transform: translateX(100%);
+      }
+      100% {
+        transform: translateX(-100%);
+      }
+    }
+
+    #artist-link {
+      margin-top: 10px;
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    #artist-link a {
+      color: #66ccff;
+      text-decoration: none;
+    }
+
+    #artist-link a:hover {
+      text-decoration: underline;
+    }
+
+    /* 🎛️ EQ Widget */
+    #eq-widget {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 60px;
+      height: 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 3px;
+    }
+
+    .eq-bar {
+      width: 8px;
+      background: #00ff99;
+      border-radius: 2px;
+      animation: bounce 1s ease-in-out infinite;
+      transform-origin: bottom;
+    }
+
+    .eq-bar:nth-child(1) { animation-delay: 0s; }
+    .eq-bar:nth-child(2) { animation-delay: 0.2s; }
+    .eq-bar:nth-child(3) { animation-delay: 0.4s; }
+    .eq-bar:nth-child(4) { animation-delay: 0.2s; }
+    .eq-bar:nth-child(5) { animation-delay: 0s; }
+
+    @keyframes bounce {
+      0%, 100% { height: 20%; }
+      50% { height: 100%; }
+    }
+
+    .paused .eq-bar {
+      animation-play-state: paused;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="eq-widget" class="paused">
+    <div class="eq-bar"></div>
+    <div class="eq-bar"></div>
+    <div class="eq-bar"></div>
+    <div class="eq-bar"></div>
+    <div class="eq-bar"></div>
+  </div>
+
+  <div id="player-container">
+    <div id="player"></div>
+  </div>
+
+  <div id="controls">
+    <button class="control-btn" onclick="prevVideo()">
+      <span class="icon">⏮️</span> Prev
+    </button>
+    <button class="control-btn" onclick="nextVideo()">
+      <span class="icon">⏭️</span> Next
+    </button>
+    <button class="control-btn" onclick="toggleFullScreen()">
+      <span class="icon">⛶</span> Fullscreen
+    </button>
+  </div>
+
+  <div id="scrolling-text-container">
+    <div id="scrolling-text">Loading track info...</div>
+  </div>
+
+  <div id="artist-link">Loading artist search links...</div>
+
+  <script>
+    const videoIds = [
+      "FzSerebJjyc", "lhG300Mg9dA", "RUKXA0NjOas", "KVjTThzyEHg", "FVqHR9Q0zjE",
+      "o9RpOkb-8eg", "NgkonXNQai4", "Skh5AoKT0V8", "onCjPwvdu6k", "sA0-v0EDRiU",
+      "_gvuR7pUnrY", "NQ0E_HYyRFs", "64_35XB_JCI", "lj9P7DzVj3I", "8yoB-dRSrDM",
+      "CFzo0NRWjFo", "QgJJv7Mf8kA", "d9V2MF5MGLc", "E4Yv3oBoWNo", "E3hnyW_h_yg",
+      "6zNRD58TkB8", "iUoTlaY8JIE", "vm8mNBgMIvM", "ZBWjss95R7Y", "tQ7_xvlE0_4"
+    ];
+
+    let currentVideo = 0;
+    let player;
+
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        height: '390',
+        width: '640',
+        videoId: videoIds[currentVideo],
+        events: {
+          'onReady': updateTrackInfo,
+          'onStateChange': onPlayerStateChange
+        },
+        playerVars: {
+          autoplay: 1,
+          controls: 1
+        }
+      });
+    }
+
+    function onPlayerStateChange(event) {
+      const eq = document.getElementById("eq-widget");
+
+      if (event.data === YT.PlayerState.ENDED) {
+        nextVideo();
+      } else if (event.data === YT.PlayerState.PLAYING) {
+        eq.classList.remove("paused");
+        updateTrackInfo();
+      } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.UNSTARTED) {
+        eq.classList.add("paused");
+      }
+    }
+
+    function nextVideo() {
+      if (currentVideo < videoIds.length - 1) {
+        currentVideo++;
+        player.loadVideoById(videoIds[currentVideo]);
+      } else {
+        alert("End of playlist");
+      }
+    }
+
+    function prevVideo() {
+      if (currentVideo > 0) {
+        currentVideo--;
+        player.loadVideoById(videoIds[currentVideo]);
+      } else {
+        alert("This is the first video");
+      }
+    }
+
+    function toggleFullScreen() {
+      const playerElement = document.getElementById("player");
+      if (!document.fullscreenElement) {
+        playerElement.requestFullscreen().catch(err => {
+          alert(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+    });
+
+    function updateTrackInfo() {
+      if (!player || typeof player.getVideoData !== 'function') return;
+
+      const data = player.getVideoData();
+      const title = data.title || "Unknown Title";
+      const author = data.author || "Unknown Artist";
+
+      document.getElementById("scrolling-text").textContent =
+        `${title} — ${author} • `.repeat(10);
+
+      const searchQueries = [
+        { label: `Search "${author}"`, query: author },
+        { label: `Search "${title}"`, query: title },
+        { label: `Search "${author} ${title}"`, query: `${author} ${title}` },
+        { label: `Search "${author} live"`, query: `${author} live` },
+        { label: `Search "${author} remix"`, query: `${author} remix` },
+      ];
+
+      const linksHtml = searchQueries
+        .map(item =>
+          `<div><a href="https://www.youtube.com/results?search_query=${encodeURIComponent(item.query)}" target="_blank">🔎 ${item.label}</a></div>`
+        )
+        .join("");
+
+      document.getElementById("artist-link").innerHTML = linksHtml;
+    }
+  </script>
+</body>
+</html>
